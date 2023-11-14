@@ -57,8 +57,10 @@ local WatermarkConfig = {
 local ChatExtrasConfig = {
 	enabled = true,
 	timestamps = true,
-	DamageLogger = true,
-	KillMessage = true,
+	damagelogger = true,
+	killmessage = false, -- Kill message in chat
+	ceneterkillmessage = true, -- Kill message in the center of the screen below crosshair
+	classchanges = true,
 	chatprefix = '[COSMOS] ',
 	timestampcolor = '#aaaaaaff',
 	prefixcolor = '#00aaffff'
@@ -106,6 +108,13 @@ local CheatsBypassConfig = {
 
 local AutoStrafeConfig = {
 	enabled = true -- Toggles autostrafe off unless you're pressing WASD
+}
+
+-- AUTO STRAFE CONFIG --
+
+local SentryRange = {
+	enabled = true, -- Shows the range of sentries
+	enemyonly = true
 }
 
 
@@ -826,8 +835,86 @@ callbacks.Register("Draw", "DrawWatermark", DrawWatermark)
 ----------------- (https://lmaobox.net/forum/v/discussion/22018/coolchatflag-lua-draft/p1)
 -- CHAT EXTRAS -- (https://github.com/lmaobox-lua/lmaobox-scripting/blob/master/end-of-support-lua/coolchatflag.lua)
 ----------------- (https://lmaobox.net/forum/v/profile/34528194/masterhero)
+-- pred#2448 for the centered animated kill text
 
 
+
+if ChatExtrasConfig.ceneterkillmessage then
+	local font_verdana = draw.CreateFont("verdana", 14, 510) --font
+	local screen_x, screen_y = draw.GetScreenSize()
+	local logs = {} --log queue
+	
+	local function handle_events(ev)
+	if ev:GetName() ~= "player_hurt" then return end
+		
+		local localplayer = entities.GetLocalPlayer()
+		local victim_entity = entities.GetByUserID(ev:GetInt("userid"))
+		local attacker_entity = entities.GetByUserID(ev:GetInt("attacker"))
+		local victim_remains = ev:GetInt("health")
+		local vitcim_dmg = ev:GetInt("damageamount")
+		local vitcim_ping = entities.GetPlayerResources():GetPropDataTableInt("m_iPing")[victim_entity:GetIndex()] --gets victim's ping
+		local is_crit = ev:GetString("crit")
+		local is_minicrit = ev:GetString("minicrit")
+		
+		if attacker_entity ~= localplayer or victim_remains > 0 then return end
+		local crit_flag = is_crit and "C" or ""
+		local mcrit_flag = is_minicrit and "M" or ""
+		local flag = crit_flag .. mcrit_flag
+		print(string.format("[LMAOBOX] Hit %s for %s damage (%s health remaining) (flags: %s) (ping: %s)", victim_entity:GetName(), vitcim_dmg, victim_remains, flag, vitcim_ping))
+		table.insert(logs, {
+			victim = victim_entity:GetName(),
+			victim_ping = vitcim_ping,
+			damage = vitcim_dmg,
+			health = victim_remains,
+			flag = flag,
+			x = -50,
+			alpha = 0,
+			delay = globals.RealTime() + 5,
+		})
+	end
+	
+	local function paint_logs()
+		draw.SetFont(font_verdana)
+		for i, v in pairs(logs) do
+			local victim = v.victim
+			local ping = v.victim_ping
+			local damage = tostring(v.damage)
+			local health = tostring(v.health)
+			local flag = v.flag
+			local x = math.floor(v.x)
+			local alpha = math.floor(v.alpha)
+			local str = string.format("Killed %s", victim)
+			local text_x, text_y = draw.GetTextSize(str)
+			draw.Color(255, 255, 255, alpha)
+			draw.Text(screen_x / 2 - math.floor(text_x / 2) + x, screen_y / 1.5 + 16 * i - 120, str)
+		end
+	end
+	
+	local function animation()
+		for i, v in pairs(logs) do
+			if v.delay > globals.RealTime() then
+				--move in
+				v.alpha = math.min(v.alpha + globals.FrameTime() * 450, 255)
+				v.x = math.min(v.x + globals.FrameTime() * 170, 0)
+			else
+				--move out
+				v.alpha = math.min(v.alpha - globals.FrameTime() * 450, 255)
+				v.x = math.min(v.x + globals.FrameTime() * 170, 50)
+				if v.alpha <= 0 then
+					table.remove(logs, i)
+				end
+			end
+		end
+	end
+	local function draw_cb()
+		paint_logs()
+		animation()
+	end
+	
+	--handles callbacks
+	callbacks.Register("FireGameEvent", "hitlog_event", handle_events)
+	callbacks.Register("Draw", "hitlog_draw", draw_cb)
+end
 
 -- Colors
 local whiteColor, oldColor, teamColor, locationColor, achievementColor, blackColor = '\x01', '\x02', '\x03', '\x04', '\x05', '\x06'
@@ -877,7 +964,7 @@ end
 
 -- Callbacks
 callbacks.Register('FireGameEvent', makeUniqueString(), function(event)
-	if event:GetName() == 'player_changeclass' then
+	if event:GetName() == 'player_changeclass' and ChatExtrasConfig.classchanges then
 
 		-- add a check if we want to print this during a competitive game when team change class
 
@@ -1005,21 +1092,21 @@ if ChatExtrasConfig.enabled then
 			else
 				timestamp = ''
 			end
-			local killMessage = argbColor( ChatExtrasConfig.prefixcolor ) .. ChatExtrasConfig.chatprefix .. timestamp .. "\x01Killed \'" .. victim:GetName() .. "\' with " .. damage .. " damage."
+			local killmessage = argbColor( ChatExtrasConfig.prefixcolor ) .. ChatExtrasConfig.chatprefix .. timestamp .. "\x01Killed \'" .. victim:GetName() .. "\' with " .. damage .. " damage." 
 	
 			if (attacker == nil or localPlayer:GetIndex() ~= attacker:GetIndex()) then
 				return
 			end
-			if ChatExtrasConfig.DamageLogger then
+			if ChatExtrasConfig.damagelogger then
 				if health == 0 then
-					print("You hit \'" ..  victim:GetName() .. "\' for " .. damage .. " damage and killed them.")
+					printc(100, 255, 100, 255, string.format("You killed \'" ..  victim:GetName() .. "\' with " .. damage .. '.'))
 				else
-					print("You hit \'" ..  victim:GetName() .. "\' for " .. damage .. " damage. They have " .. health .. " health left.")
+					printc(100, 255, 100, 255, string.format("You hit \'" ..  victim:GetName() .. "\' for " .. damage .. " damage. They have " .. health .. " health left."))
 				end
 			end
-			if ChatExtrasConfig.KillMessage then
+			if ChatExtrasConfig.killmessage then
 				if health == 0 then
-					client.ChatPrintf( killMessage )
+					client.ChatPrintf( killmessage )
 				end
 			end
 		end
@@ -1312,4 +1399,63 @@ if AutoStrafeConfig.enabled then
 		end
 	end
 	callbacks.Register("CreateMove", "AutoStrafeCheck", AutoStrafeCheck)
+end
+
+
+
+------------------
+-- SENTRY RANGE --
+------------------
+
+
+
+local localPlayer = entities.GetLocalPlayer()
+local function distance_check(entity, local_player)
+	if vector.Distance( entity:GetAbsOrigin(), local_player:GetAbsOrigin()) > 100 then 
+		return false 
+	end 
+	return true
+end
+
+local function draw_circle(pos, segments, radius)
+	local angleIncrement = 360 / segments
+	local vertices = {}
+	for i = 1, segments do
+		local angle = math.rad(i * angleIncrement)
+		local x = pos.x + math.cos(angle) * radius
+		local y = pos.y + math.sin(angle) * radius
+		local z = pos.z
+		vertices[i] = client.WorldToScreen(Vector3(x, y, z))
+	end	
+	for i = 1, segments do
+		local j = i + 1
+		if j > segments then j = 1 end
+		local vertex1, vertex2 = vertices[i], vertices[j]	 
+		if vertex1 and vertex2 then
+			draw.Line(vertex1[1], vertex1[2], vertex2[1], vertex2[2])
+		end
+	end
+end
+
+if SentryRange.enabled then 
+	local function draw_building_esp(entity_name) 
+		local buildings = entities.FindByClass( entity_name )
+		for i,b in pairs(buildings) do 
+			if not b:IsDormant() and distance_check(b, localPlayer) then
+				local localTeam = localPlayer:GetTeamNumber()
+				local enemyTeam = b:GetTeamNumber()
+
+				if SentryRange.enemyonly and enemyTeam == localTeam then 
+					goto buildings_continue
+				end
+
+				if b:GetClass() == "CObjectSentrygun" then 
+					draw.Color(200,200,200,255)
+					draw_circle(b:GetAbsOrigin(),30,1100)
+				end
+				::buildings_continue::
+			end
+		end
+	end
+	draw_building_esp("CObjectSentrygun")
 end
