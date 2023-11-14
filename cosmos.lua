@@ -101,20 +101,13 @@ local InstantRevolveReload = {
 
 local CheatsBypassConfig = {
 	enabled = true,
-	AlwaysDeathAnim = false -- tf_always_deathanim
+	AlwaysDeathAnim = true -- tf_always_deathanim
 }
 
 -- AUTO STRAFE CONFIG --
 
 local AutoStrafeConfig = {
 	enabled = true -- Toggles autostrafe off unless you're pressing WASD
-}
-
--- AUTO STRAFE CONFIG --
-
-local SentryRange = {
-	enabled = true, -- Shows the range of sentries
-	enemyonly = true
 }
 
 
@@ -1399,63 +1392,4 @@ if AutoStrafeConfig.enabled then
 		end
 	end
 	callbacks.Register("CreateMove", "AutoStrafeCheck", AutoStrafeCheck)
-end
-
-
-
-------------------
--- SENTRY RANGE --
-------------------
-
-
-
-local localPlayer = entities.GetLocalPlayer()
-local function distance_check(entity, local_player)
-	if vector.Distance( entity:GetAbsOrigin(), local_player:GetAbsOrigin()) > 100 then 
-		return false 
-	end 
-	return true
-end
-
-local function draw_circle(pos, segments, radius)
-	local angleIncrement = 360 / segments
-	local vertices = {}
-	for i = 1, segments do
-		local angle = math.rad(i * angleIncrement)
-		local x = pos.x + math.cos(angle) * radius
-		local y = pos.y + math.sin(angle) * radius
-		local z = pos.z
-		vertices[i] = client.WorldToScreen(Vector3(x, y, z))
-	end	
-	for i = 1, segments do
-		local j = i + 1
-		if j > segments then j = 1 end
-		local vertex1, vertex2 = vertices[i], vertices[j]	 
-		if vertex1 and vertex2 then
-			draw.Line(vertex1[1], vertex1[2], vertex2[1], vertex2[2])
-		end
-	end
-end
-
-if SentryRange.enabled then 
-	local function draw_building_esp(entity_name) 
-		local buildings = entities.FindByClass( entity_name )
-		for i,b in pairs(buildings) do 
-			if not b:IsDormant() and distance_check(b, localPlayer) then
-				local localTeam = localPlayer:GetTeamNumber()
-				local enemyTeam = b:GetTeamNumber()
-
-				if SentryRange.enemyonly and enemyTeam == localTeam then 
-					goto buildings_continue
-				end
-
-				if b:GetClass() == "CObjectSentrygun" then 
-					draw.Color(200,200,200,255)
-					draw_circle(b:GetAbsOrigin(),30,1100)
-				end
-				::buildings_continue::
-			end
-		end
-	end
-	draw_building_esp("CObjectSentrygun")
 end
